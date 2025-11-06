@@ -47,6 +47,17 @@
   .tag-mod { background: #3498DB; } /* Blue */
   .tag-system { background: #3498DB; } /* Blue for System */
 
+  /* Ad specific styling */
+  .ad-content {
+      max-width: 100%;
+      padding: 0;
+      word-break: normal;
+  }
+  .ad-content iframe {
+      max-width: 100%;
+      height: 60px !important; /* Fixed height for adaptive ad preview */
+      border-radius: 8px;
+  }
 
   /* Reply Container Style */
   .reply-container {
@@ -282,13 +293,20 @@ const firebaseConfig = {
 const ADMIN_CREDENTIALS = {
   "Sergio": "Beluga2014%",
   "Alex": "Ale67ForzaInter",
-  "Riccardo": "CQrK13H93NS3" // New Admin Account
+  "Riccardo": "CQrK13H93NS3" 
 };
 
 // Bot unique ID
 const BOT_UID = "BOT_SYSTEM_BOB_12345";
 const BOT_NAME = "Bob";
 const BOT_TAG = "system";
+
+// Ad message HTML
+const AD_HTML = `<div id="frame" class="ad-content" style="width: 100%;margin: auto;position: relative; z-index: 99998;">
+          <iframe data-aa='2416442' src='//acceptable.a-ads.com/2416442/?size=Adaptive'
+                            style='border:0; padding:0; width:70%; height:auto; overflow:hidden;display: block;margin: auto'></iframe>
+        </div>`;
+const AD_INTERVAL = 5; // Send ad every 5 messages
 
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
@@ -344,10 +362,21 @@ function updateAdminButton() {
   }
 }
 
-// Function to send a bot notification message
+// Function to send a bot notification message (uses 'text' for content)
 function sendBotNotification(text) {
     push(messagesRef, {
         text: text,
+        uid: BOT_UID,
+        username: BOT_NAME,
+        adminTag: BOT_TAG,
+        created: Date.now()
+    });
+}
+
+// Function to send the Ad message (uses 'html' for content)
+function sendAdMessage() {
+    push(messagesRef, {
+        html: AD_HTML, // Use 'html' property for ad content
         uid: BOT_UID,
         username: BOT_NAME,
         adminTag: BOT_TAG,
@@ -516,7 +545,7 @@ function processAdminCommand(text) {
             alert("Invalid mute time format.");
         }
         return true;
-    } else if (command === '/unmute') { // Command changed from /smute
+    } else if (command === '/unmute') { 
         // Unmute command
         remove(ref(db, `mutedUsers/${targetUid}`));
         // Bot notification
@@ -619,12 +648,20 @@ onValue(messagesRef, snapshot => {
   const data = snapshot.val();
   messagesBox.innerHTML = "";
   if (data) {
-    Object.keys(data) 
+    const allMessages = Object.keys(data) 
       .map(key => ({ key, ...data[key] }))
-      .sort((a,b) => a.created - b.created)
-      .forEach(d => {
+      .sort((a,b) => a.created - b.created);
+
+    let messageCount = 0;
+    
+    allMessages.forEach(d => {
+        // Only count user messages and bot notifications for the ad interval
+        if (d.uid !== BOT_UID || d.text) {
+            messageCount++;
+        }
+
         const wrap = document.createElement("div");
-        wrap.className = "bubble " + (d.uid === uid ? "me" : (d.uid === BOT_UID ? "them" : "them")); // Bot messages appear as "them"
+        wrap.className = "bubble " + (d.uid === uid ? "me" : "them");
         wrap.dataset.msgKey = d.key; 
 
         // New: Reply click handler (simulates swipe) - only attach if not a bot message
@@ -657,17 +694,48 @@ onValue(messagesRef, snapshot => {
 
         wrap.appendChild(nameDiv);
 
-        const textNode = document.createElement("div");
-        textNode.textContent = d.text;
+        const contentNode = document.createElement("div");
+        
+        // Check if message contains HTML (e.g., the Ad)
+        if (d.html) {
+            contentNode.innerHTML = d.html; // Insert raw HTML
+        } else {
+            contentNode.textContent = d.text; // Insert plain text
+        }
         
         // Apply Gold Text Style
         if (d.chatStyle === 'gold') {
-          textNode.classList.add('gold-text');
+          contentNode.classList.add('gold-text');
         }
 
-        wrap.appendChild(textNode);
+        wrap.appendChild(contentNode);
         messagesBox.appendChild(wrap);
-      });
+
+        // --- Ad Insertion Logic ---
+        if (messageCount > 0 && messageCount % AD_INTERVAL === 0 && d.uid !== BOT_UID) {
+             // Create an ad bubble manually (since we can't push to DB mid-render)
+             const adWrap = document.createElement("div");
+             adWrap.className = "bubble them"; 
+
+             const adNameDiv = document.createElement("div");
+             adNameDiv.className = "name";
+             adNameDiv.textContent = BOT_NAME;
+             
+             const adTagSpan = document.createElement("span");
+             adTagSpan.className = `admin-tag tag-system`;
+             adTagSpan.textContent = BOT_TAG.toUpperCase();
+             adNameDiv.appendChild(adTagSpan);
+
+             const adContentNode = document.createElement("div");
+             adContentNode.innerHTML = AD_HTML;
+             
+             adWrap.appendChild(adNameDiv);
+             adWrap.appendChild(adContentNode);
+             messagesBox.appendChild(adWrap);
+             
+             messageCount++; // Count the ad message itself
+        }
+    });
   }
   messagesBox.scrollTop = messagesBox.scrollHeight;
 });
@@ -684,4 +752,3 @@ if (localStorage.getItem("theme") === "dark") document.body.dataset.theme = "dar
 
 </body>
 </html>
-
