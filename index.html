@@ -58,6 +58,14 @@
       height: 60px !important; /* Fixed height for adaptive ad preview */
       border-radius: 8px;
   }
+  /* Stile modificato per evitare che sia in primo piano e il refresh */
+  #frame {
+      width: 100%;
+      margin: auto;
+      position: relative; 
+      z-index: 1; /* Abbassato z-index per non essere in primo piano */
+  }
+
 
   /* Reply Container Style */
   .reply-container {
@@ -302,11 +310,12 @@ const BOT_NAME = "Bob";
 const BOT_TAG = "system";
 
 // Ad message HTML
-const AD_HTML = `<div id="frame" class="ad-content" style="width: 100%;margin: auto;position: relative; z-index: 99998;">
+const AD_HTML = `<div id="frame" style="width: 100%;margin: auto;position: relative; z-index: 1;">
           <iframe data-aa='2416442' src='//acceptable.a-ads.com/2416442/?size=Adaptive'
                             style='border:0; padding:0; width:70%; height:auto; overflow:hidden;display: block;margin: auto'></iframe>
         </div>`;
-const AD_INTERVAL = 5; // Send ad every 5 messages
+// Intervallo annunci: 10-12 messaggi (generazione casuale)
+let AD_INTERVAL = Math.floor(Math.random() * (12 - 10 + 1)) + 10; 
 
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
@@ -323,6 +332,9 @@ let replyingTo = null;
 let isMuted = false;
 let muteEndTime = 0;
 let muteInterval = null;
+
+// Variabile per tracciare il conteggio dei messaggi in JS (non persistente su DB)
+let messageCount = 0; 
 
 // New elements for mute feature
 const inputBar = document.getElementById("inputBar");
@@ -647,15 +659,19 @@ onValue(mutedUsersRef, snapshot => {
 onValue(messagesRef, snapshot => {
   const data = snapshot.val();
   messagesBox.innerHTML = "";
+  messageCount = 0; // Reset count per render
+
   if (data) {
     const allMessages = Object.keys(data) 
       .map(key => ({ key, ...data[key] }))
       .sort((a,b) => a.created - b.created);
 
-    let messageCount = 0;
-    
+    // Variabile per mantenere lo stato di iniezione dell'ad attraverso il rendering
+    let injectedAds = 0; 
+
     allMessages.forEach(d => {
-        // Only count user messages and bot notifications for the ad interval
+        // Se il messaggio è un annuncio dal bot, non viene conteggiato per l'intervallo successivo,
+        // ma viene comunque visualizzato
         if (d.uid !== BOT_UID || d.text) {
             messageCount++;
         }
@@ -665,7 +681,7 @@ onValue(messagesRef, snapshot => {
         wrap.dataset.msgKey = d.key; 
 
         // New: Reply click handler (simulates swipe) - only attach if not a bot message
-        if (d.uid !== BOT_UID) {
+        if (d.uid !== BOT_UID && !d.html) {
             wrap.addEventListener('click', () => {
                 setReply(d.key, d.username, d.text, d.uid); 
             });
@@ -698,9 +714,10 @@ onValue(messagesRef, snapshot => {
         
         // Check if message contains HTML (e.g., the Ad)
         if (d.html) {
-            contentNode.innerHTML = d.html; // Insert raw HTML
+            // Se è un annuncio salvato nel DB, lo visualizza
+            contentNode.innerHTML = d.html; 
         } else {
-            contentNode.textContent = d.text; // Insert plain text
+            contentNode.textContent = d.text || ""; // Insert plain text
         }
         
         // Apply Gold Text Style
@@ -711,9 +728,15 @@ onValue(messagesRef, snapshot => {
         wrap.appendChild(contentNode);
         messagesBox.appendChild(wrap);
 
-        // --- Ad Insertion Logic ---
-        if (messageCount > 0 && messageCount % AD_INTERVAL === 0 && d.uid !== BOT_UID) {
-             // Create an ad bubble manually (since we can't push to DB mid-render)
+        // --- Ad Insertion Logic (per l'iniezione dinamica) ---
+        // Aggiunge l'annuncio solo se non è un messaggio dal bot (che non è un annuncio stesso)
+        // e se l'intervallo è stato raggiunto.
+        if (messageCount % AD_INTERVAL === 0 && d.uid !== BOT_UID && !d.html && messageCount > injectedAds * AD_INTERVAL) {
+             // Re-calcola il prossimo intervallo casuale 10-12
+             AD_INTERVAL = Math.floor(Math.random() * (12 - 10 + 1)) + 10;
+             injectedAds++; // Traccia l'iniezione
+
+             // Crea un bubble per l'annuncio
              const adWrap = document.createElement("div");
              adWrap.className = "bubble them"; 
 
@@ -733,7 +756,7 @@ onValue(messagesRef, snapshot => {
              adWrap.appendChild(adContentNode);
              messagesBox.appendChild(adWrap);
              
-             messageCount++; // Count the ad message itself
+             messageCount++; // Incrementa il conteggio per l'annuncio inserito dinamicamente
         }
     });
   }
