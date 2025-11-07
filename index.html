@@ -209,6 +209,27 @@
   }
 
 </style>
+
+<script type="text/javascript">
+window._qevents = window._qevents || [];
+(function() {
+var elem = document.createElement('script');
+elem.src = (document.location.protocol == "https:" ? "https://secure" : "http://edge") + ".quantserve.com/quant.js";
+elem.async = true;
+elem.type = "text/javascript";
+var scpt = document.getElementsByTagName('script')[0];
+scpt.parentNode.insertBefore(elem, scpt);
+})();
+window._qevents.push({
+qacct:"p-2TpX8KnRnZJah",
+uid:"__INSERT_EMAIL_HERE__"
+});
+</script>
+<noscript>
+<div style="display:none;">
+<img src="//pixel.quantserve.com/pixel/p-2TpX8KnRnZJah.gif" border="0" height="1" width="1" alt="Quantcast"/>
+</div>
+</noscript>
 </head>
 <body>
 
@@ -670,8 +691,7 @@ onValue(messagesRef, snapshot => {
     let injectedAds = 0; 
 
     allMessages.forEach(d => {
-        // Se il messaggio è un annuncio dal bot, non viene conteggiato per l'intervallo successivo,
-        // ma viene comunque visualizzato
+        // Conta solo i messaggi utente e le notifiche bot non-ad
         if (d.uid !== BOT_UID || d.text) {
             messageCount++;
         }
@@ -680,7 +700,7 @@ onValue(messagesRef, snapshot => {
         wrap.className = "bubble " + (d.uid === uid ? "me" : "them");
         wrap.dataset.msgKey = d.key; 
 
-        // New: Reply click handler (simulates swipe) - only attach if not a bot message
+        // New: Reply click handler (simulates swipe) - only attach if not a bot message or ad
         if (d.uid !== BOT_UID && !d.html) {
             wrap.addEventListener('click', () => {
                 setReply(d.key, d.username, d.text, d.uid); 
@@ -729,11 +749,9 @@ onValue(messagesRef, snapshot => {
         messagesBox.appendChild(wrap);
 
         // --- Ad Insertion Logic (per l'iniezione dinamica) ---
-        // Aggiunge l'annuncio solo se non è un messaggio dal bot (che non è un annuncio stesso)
-        // e se l'intervallo è stato raggiunto.
-        if (messageCount % AD_INTERVAL === 0 && d.uid !== BOT_UID && !d.html && messageCount > injectedAds * AD_INTERVAL) {
-             // Re-calcola il prossimo intervallo casuale 10-12
-             AD_INTERVAL = Math.floor(Math.random() * (12 - 10 + 1)) + 10;
+        // Se il conteggio raggiunge l'intervallo, inserisce l'annuncio
+        if (messageCount % AD_INTERVAL === 0 && d.uid !== BOT_UID && !d.html && messageCount > (injectedAds * AD_INTERVAL)) {
+             
              injectedAds++; // Traccia l'iniezione
 
              // Crea un bubble per l'annuncio
@@ -757,6 +775,9 @@ onValue(messagesRef, snapshot => {
              messagesBox.appendChild(adWrap);
              
              messageCount++; // Incrementa il conteggio per l'annuncio inserito dinamicamente
+             
+             // Re-calcola il prossimo intervallo casuale 10-12
+             AD_INTERVAL = Math.floor(Math.random() * (12 - 10 + 1)) + 10;
         }
     });
   }
