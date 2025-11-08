@@ -3,15 +3,16 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
-<title>Realtime DB Chat</title>
+<title>Realtime Chat</title>
 
+<!-- Icons -->
 <link rel="stylesheet" href="https://unicons.iconscout.com/release/v4.0.8/css/line.css" />
 
 <style>
   :root {
     --bg:#f5f5f5;--text:#111;--bubble-me:#daf8cb;--bubble-them:#fff;
     --input-bg:#fff;--border:#ddd;--name:#555;
-    --admin-gold: #FFD700;
+    --accent: #4285F4; /* Google Blue */
   }
   [data-theme="dark"] {
     --bg:#0f0f0f;--text:#e9e9e9;--bubble-me:#005c4b;--bubble-them:#1f1f1f;
@@ -21,7 +22,10 @@
 
   body{background:var(--bg);color:var(--text);display:flex;justify-content:center;align-items:center;height:100dvh;overflow:hidden;}
 
-  .chat-container{width:100%;max-width:480px;height:100%;display:flex;flex-direction:column;border-left:1px solid var(--border);border-right:1px solid var(--border);}
+  /* Main chat container visibility is controlled by JS based on Auth status */
+  #mainApp { display: none; }
+
+  .chat-container{width:100%;max-width:480px;height:100%;display:flex;flex-direction:column;border-left:1px solid var(--border);border-right:1px solid var(--border);background:var(--bg);}
 
   .header{padding:12px;display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid var(--border);font-weight:600;flex-shrink:0}
 
@@ -33,39 +37,23 @@
   
   .me{align-self:flex-end;background:var(--bubble-me);border-bottom-right-radius:4px}
   .them{align-self:flex-start;background:var(--bubble-them);border-bottom-left-radius:4px}
-  .gold-text{color:var(--admin-gold);font-weight:700;text-shadow: 1px 1px 1px rgba(0,0,0,0.1)}
 
-  .name{font-size:12px;font-weight:600;margin-bottom:4px;color:var(--name);display:flex;align-items:center;gap:6px;}
-  .admin-tag {
-    font-size: 10px;
-    padding: 2px 6px;
-    border-radius: 8px;
-    font-weight: 700;
-    color: white;
-  }
-  .tag-admin { background: #E74C3C; } /* Red */
-  .tag-mod { background: #3498DB; } /* Blue */
-  .tag-system { background: #3498DB; } /* Blue for System */
+  .user-info{display:flex;align-items:center;gap:8px;margin-bottom:4px;}
+  .name{font-size:12px;font-weight:600;color:var(--name);}
 
-  /* Ad specific styling */
-  .ad-content {
-      max-width: 100%;
-      padding: 0;
-      word-break: normal;
+  /* Avatar Styling */
+  .avatar {
+    width: 24px;
+    height: 24px;
+    border-radius: 50%;
+    object-fit: cover;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 16px; /* For emoji */
+    background: #ccc;
+    flex-shrink: 0;
   }
-  .ad-content iframe {
-      max-width: 100%;
-      height: 60px !important; /* Fixed height for adaptive ad preview */
-      border-radius: 8px;
-  }
-  /* Stile modificato per evitare che sia in primo piano e il refresh */
-  #frame {
-      width: 100%;
-      margin: auto;
-      position: relative; 
-      z-index: 1; /* Abbassato z-index per non essere in primo piano */
-  }
-
 
   /* Reply Container Style */
   .reply-container {
@@ -127,21 +115,6 @@
 
   .input-fields{display:flex;gap:8px;}
 
-  /* Muted Bar Style */
-  #mutedNav {
-    display: none;
-    background: #E74C3C;
-    color: white;
-    padding: 12px;
-    text-align: center;
-    font-weight: 600;
-    border-radius: 20px;
-  }
-  /* Show muted nav instead of input fields when muted */
-  .input-bar.muted .input-fields, .input-bar.muted .reply-preview { display: none; }
-  .input-bar.muted #mutedNav { display: block; }
-
-
   input{flex:1;padding:10px 12px;border:1px solid var(--border);border-radius:20px;font-size:15px;background:var(--input-bg);color:var(--text);}
   input:focus{outline:none;border-color:#888}
 
@@ -154,91 +127,65 @@
 
   /* modal styles */
   .modal-overlay{
-    position:fixed;inset:0;background:rgba(0,0,0,.6);display:flex;justify-content:center;align-items:center;z-index:1000;
+    position:fixed;inset:0;background:rgba(0,0,0,.8);display:flex;justify-content:center;align-items:center;z-index:1000;
   }
   .modal-box{
-    background:var(--bg);padding:20px;border-radius:12px;width:85%;max-width:320px;display:flex;flex-direction:column;gap:12px;border:1px solid var(--border);position:relative;
+    background:var(--bg);padding:20px;border-radius:12px;width:90%;max-width:380px;display:flex;flex-direction:column;gap:15px;border:1px solid var(--border);
+    box-shadow: 0 10px 25px rgba(0,0,0,0.2);
   }
-  .modal-box input{border-radius:8px}
-  .modal-box button{font-size:16px;padding:8px 0;border-radius:8px;background:var(--bubble-me);color:var(--text)}
+  .modal-box input, .modal-box button{border-radius:8px;padding:10px 12px;font-size:16px;}
+  .modal-box button{background:var(--accent);color:white;font-weight:600;border:none;cursor:pointer;transition:background 0.2s;}
+  .modal-box button:hover{background: #3c7ce8;}
   
-  /* Redesigned Close Button */
-  .close-btn{
-    position:absolute;top:10px;right:10px;
-    font-size:24px; /* Larger icon */
-    background:none;border:none;cursor:pointer;color:var(--text);
-    padding: 0;
-    height: 24px;
-    width: 24px;
+  /* Auth Tabs */
+  .tab-bar { display: flex; border-bottom: 1px solid var(--border); margin-bottom: 10px; }
+  .tab-bar button { flex: 1; padding: 10px 0; border: none; background: none; color: var(--name); font-weight: 600; cursor: pointer; border-bottom: 3px solid transparent; }
+  .tab-bar button.active { color: var(--text); border-bottom-color: var(--accent); }
+
+  .auth-section { display: none; flex-direction: column; gap: 15px; }
+  .auth-section.active { display: flex; }
+
+  .google-btn {
+    background: white;
+    color: #444;
+    border: 1px solid #ccc;
     display: flex;
     align-items: center;
     justify-content: center;
-  }
-
-  .modal-box label { display: block; margin-bottom: 4px; font-size: 14px; }
-  .modal-box select { padding: 8px; border-radius: 8px; border: 1px solid var(--border); width: 100%; background: var(--input-bg); color: var(--text); }
-  .modal-box p { font-size: 14px; color: var(--name); }
-  
-  /* Red Admin Button Style */
-  #removeAllBtn {
-    background: #E74C3C;
-    color: white;
-    font-size: 16px;
-    font-weight: 600;
-    margin-top: 10px;
-    transition: background 0.2s;
-  }
-  #removeAllBtn:hover {
-    background: #C0392B;
-  }
-
-  /* Admin button */
-  #adminBtn {
-    padding: 6px 10px;
+    gap: 10px;
     font-size: 14px;
-    font-weight: 600;
-    border-radius: 9999px; /* Max rounded corners */
-    background: #2ECC71; /* Green color */
-    color: white;
-    border: none;
-    cursor: pointer;
-    transition: background 0.2s;
   }
-  #adminBtn:hover {
-    background: #27AE60;
-  }
+  .google-btn:hover { background: #f8f8f8; }
+  .google-icon { width: 18px; height: 18px; }
 
+  .error-message { color: #E74C3C; font-size: 14px; text-align: center; font-weight: 600; }
+  
+  #userProfile {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  #logoutBtn {
+    color: #E74C3C;
+    font-size: 18px;
+    padding: 0;
+    transition: opacity 0.2s;
+  }
+  #logoutBtn:hover {
+    opacity: 0.8;
+  }
 </style>
-
-<script type="text/javascript">
-window._qevents = window._qevents || [];
-(function() {
-var elem = document.createElement('script');
-elem.src = (document.location.protocol == "https:" ? "https://secure" : "http://edge") + ".quantserve.com/quant.js";
-elem.async = true;
-elem.type = "text/javascript";
-var scpt = document.getElementsByTagName('script')[0];
-scpt.parentNode.insertBefore(elem, scpt);
-})();
-window._qevents.push({
-qacct:"p-2TpX8KnRnZJah",
-uid:"__INSERT_EMAIL_HERE__"
-});
-</script>
-<noscript>
-<div style="display:none;">
-<img src="//pixel.quantserve.com/pixel/p-2TpX8KnRnZJah.gif" border="0" height="1" width="1" alt="Quantcast"/>
-</div>
-</noscript>
 </head>
 <body>
 
-<div class="chat-container">
+<div id="mainApp" class="chat-container">
   <div class="header">
-    <span id="chatTitle">Chat</span>
+    <span id="chatTitle">Realtime Chat</span>
+    <div id="userProfile">
+      <!-- Profile image and user name will go here -->
+    </div>
     <div style="display:flex;gap:12px;align-items:center">
-      <button id="adminBtn">Become Admin</button>
-      <i id="settingsBtn" class="uil uil-setting" style="font-size:22px;cursor:pointer"></i>
+      <i id="logoutBtn" class="uil uil-sign-out-alt" title="Logout"></i>
       <div id="themeToggle" class="toggle"></div>
     </div>
   </div>
@@ -246,7 +193,6 @@ uid:"__INSERT_EMAIL_HERE__"
   <div id="messages" class="messages"></div>
 
   <div id="inputBar" class="input-bar">
-    <div id="mutedNav"></div>
     <div id="replyPreview" class="reply-preview">
         <div id="replyInfo" class="reply-info"></div>
         <i id="replyCancelBtn" class="uil uil-multiply reply-cancel-btn"></i>
@@ -258,56 +204,56 @@ uid:"__INSERT_EMAIL_HERE__"
   </div>
 </div>
 
-<div id="nameModal" class="modal-overlay" style="display:none">
+<!-- Authentication Modal -->
+<div id="authModal" class="modal-overlay">
   <div class="modal-box">
-    <button class="close-btn" onclick="document.getElementById('nameModal').style.display='none'"><i class="uil uil-multiply"></i></button>
-    <h3>Enter your name</h3>
-    <input id="nameInput" type="text" placeholder="Your name..." />
-    <button id="saveNameBtn">Save</button>
-  </div>
-</div>
+    <div class="tab-bar">
+      <button id="loginTabBtn" class="active">Accedi</button>
+      <button id="signupTabBtn">Registrati</button>
+    </div>
 
-<div id="adminLoginModal" class="modal-overlay" style="display:none">
-  <div class="modal-box">
-    <button class="close-btn" onclick="document.getElementById('adminLoginModal').style.display='none'"><i class="uil uil-multiply"></i></button>
-    <h3>Admin Login</h3>
-    <input id="adminUser" type="text" placeholder="Username" />
-    <input id="adminPass" type="password" placeholder="Password" />
-    <p id="adminLoginError" style="color:red;display:none;font-weight:600;">Invalid credentials</p>
-    <button id="loginAdminBtn">Login</button>
-  </div>
-</div>
+    <div id="loginSection" class="auth-section active">
+      <input id="loginEmail" type="email" placeholder="Email" />
+      <input id="loginPassword" type="password" placeholder="Password" />
+      <p id="loginError" class="error-message" style="display:none"></p>
+      <button id="emailLoginBtn">Accedi con Email</button>
+      <button id="googleLoginBtn" class="google-btn">
+        <img class="google-icon" src="https://upload.wikimedia.org/wikipedia/commons/thumb/c/c1/Google_%22G%22_logo.svg/512px-Google_%22G%22_logo.svg.png" alt="Google logo"/>
+        Accedi con Google
+      </button>
+    </div>
 
-<div id="adminPanelModal" class="modal-overlay" style="display:none">
-  <div class="modal-box">
-    <button class="close-btn" onclick="document.getElementById('adminPanelModal').style.display='none'"><i class="uil uil-multiply"></i></button>
-    <h3>Admin Panel</h3>
-    
-    <label for="chatStyleSelect">Chat Text Style (Self):</label>
-    <select id="chatStyleSelect">
-      <option value="normal">Normal</option>
-      <option value="gold">Gold (Admin Only)</option>
-    </select>
-
-    <label for="adminTagSelect">Admin Tag:</label>
-    <select id="adminTagSelect">
-      <option value="none">None</option>
-      <option value="admin">Admin</option>
-      <option value="mod">Mod</option>
-    </select>
-    
-    <button id="saveAdminSettingsBtn">Save Settings</button>
-    
-    <button id="removeAllBtn">Remove All Messages</button>
-
+    <div id="signupSection" class="auth-section">
+      <input id="signupUsername" type="text" placeholder="Nome Utente (per Email/Password)" />
+      <input id="signupEmail" type="email" placeholder="Email" />
+      <input id="signupPassword" type="password" placeholder="Password (min. 6 caratteri)" />
+      <p id="signupError" class="error-message" style="display:none"></p>
+      <button id="emailSignupBtn">Registrati con Email</button>
+      <button id="googleSignupBtn" class="google-btn">
+        <img class="google-icon" src="https://upload.wikimedia.org/wikipedia/commons/thumb/c/c1/Google_%22G%22_logo.svg/512px-Google_%22G%22_logo.svg.png" alt="Google logo"/>
+        Registrati con Google
+      </button>
+    </div>
   </div>
 </div>
 
 <script type="module">
 import { initializeApp } from "https://www.gstatic.com/firebasejs/12.5.0/firebase-app.js";
-import { getDatabase, ref, push, onValue, update, remove, set } from "https://www.gstatic.com/firebasejs/12.5.0/firebase-database.js";
+import { 
+  getDatabase, ref, push, onValue, set, get 
+} from "https://www.gstatic.com/firebasejs/12.5.0/firebase-database.js";
+import { 
+  getAuth, 
+  onAuthStateChanged, 
+  GoogleAuthProvider, 
+  signInWithPopup, 
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  signOut,
+  updateProfile
+} from "https://www.gstatic.com/firebasejs/12.5.0/firebase-auth.js";
 
-// Firebase config
+// Firebase config (The original config is kept)
 const firebaseConfig = {
   apiKey: "AIzaSyAyKbYd-nB-n38Dz1ZgHjvu7ZKz8--nz6Y",
   authDomain: "chatapponrecdn.firebaseapp.com",
@@ -319,200 +265,318 @@ const firebaseConfig = {
   databaseURL: "https://chatapponrecdn-default-rtdb.firebaseio.com"
 };
 
-const ADMIN_CREDENTIALS = {
-  "Sergio": "Beluga2014%",
-  "Alex": "Ale67ForzaInter",
-  "Riccardo": "CQrK13H93NS3" 
-};
-
-// Bot unique ID
-const BOT_UID = "BOT_SYSTEM_BOB_12345";
-const BOT_NAME = "Bob";
-const BOT_TAG = "system";
-
-// Ad message HTML
-const AD_HTML = `<div id="frame" style="width: 100%;margin: auto;position: relative; z-index: 1;">
-          <iframe data-aa='2416442' src='//acceptable.a-ads.com/2416442/?size=Adaptive'
-                            style='border:0; padding:0; width:70%; height:auto; overflow:hidden;display: block;margin: auto'></iframe>
-        </div>`;
-// Intervallo annunci: 10-12 messaggi (generazione casuale)
-let AD_INTERVAL = Math.floor(Math.random() * (12 - 10 + 1)) + 10; 
-
 const app = initializeApp(firebaseConfig);
 const db = getDatabase(app);
+const auth = getAuth(app);
 const messagesRef = ref(db, "messages");
 const usersRef = ref(db, "users");
-const mutedUsersRef = ref(db, "mutedUsers");
 
-let uid = localStorage.getItem("uid") || crypto.randomUUID();
-localStorage.setItem("uid", uid);
-
-let username = localStorage.getItem("username");
-let isAdmin = localStorage.getItem("isAdmin") === "true"; 
+let user = null; // Firebase User object
 let replyingTo = null; 
-let isMuted = false;
-let muteEndTime = 0;
-let muteInterval = null;
 
-// Variabile per tracciare il conteggio dei messaggi in JS (non persistente su DB)
-let messageCount = 0; 
+// Emojis for Email/Password users
+const EMOJI_AVATARS = ["😀", "😁", "😂", "😃", "😄", "😅", "😆", "😇", "😈", "😉", "😊", "😋", "😌", "😍", "😎", "😏", "😐", "😑", "😒", "🙄", "🤠", "🤩", "🥳", "🤯", "🤪", "🥺"];
+const DEFAULT_AVATAR = "👤"; // Fallback/default emoji
 
-// New elements for mute feature
-const inputBar = document.getElementById("inputBar");
-const mutedNav = document.getElementById("mutedNav");
+/**
+ * Returns a random emoji from the predefined list.
+ * @returns {string} Random emoji.
+ */
+function getRandomEmoji() {
+  return EMOJI_AVATARS[Math.floor(Math.random() * EMOJI_AVATARS.length)];
+}
 
-const nameModal = document.getElementById("nameModal");
-const nameInput = document.getElementById("nameInput");
-const saveNameBtn = document.getElementById("saveNameBtn");
-const settingsBtn = document.getElementById("settingsBtn");
+/**
+ * Ensures the user has a profile picture (URL or Emoji).
+ * If the user is Email/Password and lacks a photoURL, a random emoji is generated and stored.
+ * @param {object} currentUser - The Firebase User object.
+ * @param {string} username - The display name provided by the user (only for sign-up).
+ */
+async function ensureUserProfile(currentUser, username = null) {
+  const userNodeRef = ref(db, `users/${currentUser.uid}`);
+  
+  if (currentUser.photoURL) {
+    // Google user - photoURL is ready
+    await set(userNodeRef, {
+      displayName: currentUser.displayName,
+      photoURL: currentUser.photoURL,
+    });
+    return { name: currentUser.displayName, avatar: currentUser.photoURL };
+  } 
 
-// Elements for admin feature
-const adminBtn = document.getElementById("adminBtn");
-const adminLoginModal = document.getElementById("adminLoginModal");
-const adminPanelModal = document.getElementById("adminPanelModal");
-const adminUser = document.getElementById("adminUser");
-const adminPass = document.getElementById("adminPass");
-const loginAdminBtn = document.getElementById("loginAdminBtn");
-const adminLoginError = document.getElementById("adminLoginError");
-const chatStyleSelect = document.getElementById("chatStyleSelect");
-const adminTagSelect = document.getElementById("adminTagSelect");
-const saveAdminSettingsBtn = document.getElementById("saveAdminSettingsBtn");
-const removeAllBtn = document.getElementById("removeAllBtn"); 
+  // Check if we already have the user data in Realtime DB
+  const snapshot = await get(userNodeRef);
+  if (snapshot.exists() && snapshot.val().avatar) {
+    return { name: snapshot.val().displayName, avatar: snapshot.val().avatar };
+  }
+  
+  // Email/Password user (or first-time Google sign-in without a name)
+  let name = currentUser.displayName || username || "Chat User";
+  let avatar = getRandomEmoji();
 
-// Elements for reply feature
+  // If new registration via Email/Password, update Firebase Auth profile too
+  if (!currentUser.displayName && username) {
+     await updateProfile(currentUser, { displayName: name });
+  }
+
+  // Store the generated avatar and name in Realtime DB
+  await set(userNodeRef, {
+    displayName: name,
+    avatar: avatar,
+  });
+
+  return { name, avatar };
+}
+
+// --- DOM ELEMENTS ---
+const mainApp = document.getElementById("mainApp");
+const authModal = document.getElementById("authModal");
+
+const loginTabBtn = document.getElementById("loginTabBtn");
+const signupTabBtn = document.getElementById("signupTabBtn");
+const loginSection = document.getElementById("loginSection");
+const signupSection = document.getElementById("signupSection");
+
+const loginEmail = document.getElementById("loginEmail");
+const loginPassword = document.getElementById("loginPassword");
+const loginError = document.getElementById("loginError");
+const emailLoginBtn = document.getElementById("emailLoginBtn");
+const googleLoginBtn = document.getElementById("googleLoginBtn");
+
+const signupUsername = document.getElementById("signupUsername");
+const signupEmail = document.getElementById("signupEmail");
+const signupPassword = document.getElementById("signupPassword");
+const signupError = document.getElementById("signupError");
+const emailSignupBtn = document.getElementById("emailSignupBtn");
+const googleSignupBtn = document.getElementById("googleSignupBtn");
+
+const messagesBox = document.getElementById("messages");
+const msgInput = document.getElementById("msgInput");
+const sendBtn = document.getElementById("sendBtn");
+const logoutBtn = document.getElementById("logoutBtn");
+
+const userProfileDiv = document.getElementById("userProfile");
 const replyPreview = document.getElementById("replyPreview");
 const replyInfo = document.getElementById("replyInfo");
 const replyCancelBtn = document.getElementById("replyCancelBtn");
 
+// --- UTILITY FUNCTIONS ---
 
-function updateAdminButton() {
-  if (isAdmin) {
-    adminBtn.textContent = "Admin Panel";
-    adminBtn.onclick = showAdminPanel;
-  } else {
-    adminBtn.textContent = "Become Admin";
-    adminBtn.onclick = showAdminLoginModal;
-  }
+function showAuthError(element, message) {
+  element.textContent = message;
+  element.style.display = "block";
 }
 
-// Function to send a bot notification message (uses 'text' for content)
-function sendBotNotification(text) {
-    push(messagesRef, {
-        text: text,
-        uid: BOT_UID,
-        username: BOT_NAME,
-        adminTag: BOT_TAG,
-        created: Date.now()
+function clearAuthErrors() {
+  loginError.style.display = "none";
+  signupError.style.display = "none";
+}
+
+function handleAuthError(error, errorElement) {
+  let message;
+  switch (error.code) {
+    case 'auth/user-not-found':
+    case 'auth/wrong-password':
+      message = "Email o password non validi.";
+      break;
+    case 'auth/email-already-in-use':
+      message = "Questa email è già registrata.";
+      break;
+    case 'auth/weak-password':
+      message = "La password deve essere lunga almeno 6 caratteri.";
+      break;
+    case 'auth/invalid-email':
+      message = "Formato email non valido.";
+      break;
+    default:
+      console.error(error);
+      message = `Errore di autenticazione: ${error.message}`;
+  }
+  showAuthError(errorElement, message);
+}
+
+// --- AUTH LOGIC ---
+
+// Tab switching
+loginTabBtn.onclick = () => {
+  loginTabBtn.classList.add("active");
+  signupTabBtn.classList.remove("active");
+  loginSection.classList.add("active");
+  signupSection.classList.remove("active");
+  clearAuthErrors();
+};
+
+signupTabBtn.onclick = () => {
+  signupTabBtn.classList.add("active");
+  loginTabBtn.classList.remove("active");
+  signupSection.classList.add("active");
+  loginSection.classList.remove("active");
+  clearAuthErrors();
+};
+
+// Google Auth
+const provider = new GoogleAuthProvider();
+async function handleGoogleAuth(errorElement) {
+  clearAuthErrors();
+  try {
+    const result = await signInWithPopup(auth, provider);
+    // User signed in successfully, onAuthStateChanged handles the rest
+  } catch (error) {
+    handleAuthError(error, errorElement);
+  }
+}
+googleLoginBtn.onclick = () => handleGoogleAuth(loginError);
+googleSignupBtn.onclick = () => handleGoogleAuth(signupError);
+
+// Email/Password Sign Up
+emailSignupBtn.onclick = async () => {
+  const name = signupUsername.value.trim();
+  const email = signupEmail.value.trim();
+  const password = signupPassword.value.trim();
+
+  if (!name) return showAuthError(signupError, "Inserisci un nome utente.");
+
+  clearAuthErrors();
+  try {
+    const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+    const user = userCredential.user;
+    
+    // Store profile data (name and generated emoji) in DB
+    await ensureUserProfile(user, name); 
+    // onAuthStateChanged handles UI update
+  } catch (error) {
+    handleAuthError(error, signupError);
+  }
+};
+
+// Email/Password Login
+emailLoginBtn.onclick = async () => {
+  const email = loginEmail.value.trim();
+  const password = loginPassword.value.trim();
+
+  clearAuthErrors();
+  try {
+    await signInWithEmailAndPassword(auth, email, password);
+    // onAuthStateChanged handles UI update
+  } catch (error) {
+    handleAuthError(error, loginError);
+  }
+};
+
+// Logout
+logoutBtn.onclick = () => {
+  signOut(auth);
+};
+
+// --- AUTH STATE CHANGE HANDLER (The core of the app) ---
+onAuthStateChanged(auth, async (currentUser) => {
+  if (currentUser) {
+    // User is signed in
+    user = currentUser;
+    authModal.style.display = "none";
+    mainApp.style.display = "flex";
+
+    // 1. Ensure user profile data is ready (name, avatar, or generated emoji)
+    const { name, avatar } = await ensureUserProfile(user);
+
+    // 2. Update the global user object with the complete data
+    user.displayName = name;
+    user.photoURL = avatar;
+
+    // 3. Update header profile icon
+    userProfileDiv.innerHTML = `
+        ${avatar.startsWith('http') ? 
+          `<img src="${avatar}" alt="Avatar" class="avatar" />` : 
+          `<span class="avatar">${avatar}</span>`
+        }
+        <span class="name">${name}</span>
+    `;
+
+    // 4. Start listening to messages only when authenticated
+    startMessageListener();
+
+  } else {
+    // User is signed out
+    user = null;
+    mainApp.style.display = "none";
+    authModal.style.display = "flex";
+    messagesBox.innerHTML = ""; // Clear chat on logout
+    userProfileDiv.innerHTML = "";
+    
+    // Stop listening (if listener was active)
+    if (unsubscribe) unsubscribe(); 
+  }
+});
+
+// --- CHAT LOGIC ---
+
+let unsubscribe = null; // Variable to hold the onValue unsubscription function
+
+function startMessageListener() {
+    // If a listener already exists, unsubscribe it first
+    if (unsubscribe) unsubscribe();
+
+    unsubscribe = onValue(messagesRef, (snapshot) => {
+      const data = snapshot.val();
+      messagesBox.innerHTML = "";
+
+      if (data) {
+        const allMessages = Object.keys(data) 
+          .map(key => ({ key, ...data[key] }))
+          .sort((a,b) => a.created - b.created);
+
+        allMessages.forEach(d => {
+            const wrap = document.createElement("div");
+            wrap.className = "bubble " + (d.uid === user.uid ? "me" : "them");
+            wrap.dataset.msgKey = d.key; 
+
+            // Reply click handler (simulates swipe)
+            wrap.addEventListener('click', () => {
+                setReply(d.key, d.username, d.text, d.uid); 
+            });
+
+            // Add reply container if message is a reply
+            if (d.replyToKey) {
+                const replyDiv = document.createElement("div");
+                replyDiv.className = "reply-container";
+                replyDiv.innerHTML = `<strong>${d.replyToUser}</strong> ${d.replyToText}`;
+                wrap.appendChild(replyDiv);
+            }
+
+            // User Info (Name + Avatar)
+            const userInfoDiv = document.createElement("div");
+            userInfoDiv.className = "user-info";
+
+            const avatarNode = document.createElement(d.avatar.startsWith('http') ? 'img' : 'span');
+            avatarNode.className = "avatar";
+            if (d.avatar.startsWith('http')) {
+                avatarNode.src = d.avatar;
+            } else {
+                avatarNode.textContent = d.avatar;
+            }
+            
+            const nameSpan = document.createElement("span");
+            nameSpan.className = "name";
+            nameSpan.textContent = d.username || "Unknown";
+            
+            userInfoDiv.appendChild(avatarNode);
+            userInfoDiv.appendChild(nameSpan);
+            wrap.appendChild(userInfoDiv);
+            
+            const contentNode = document.createElement("div");
+            contentNode.textContent = d.text || ""; // Insert plain text
+            wrap.appendChild(contentNode);
+
+            messagesBox.appendChild(wrap);
+        });
+      }
+      messagesBox.scrollTop = messagesBox.scrollHeight;
     });
 }
-
-// Function to send the Ad message (uses 'html' for content)
-function sendAdMessage() {
-    push(messagesRef, {
-        html: AD_HTML, // Use 'html' property for ad content
-        uid: BOT_UID,
-        username: BOT_NAME,
-        adminTag: BOT_TAG,
-        created: Date.now()
-    });
-}
-
-
-function showNameModal() {
-  nameModal.style.display = "flex";
-  nameInput.value = username || "";
-  nameInput.focus();
-}
-
-function showAdminLoginModal() {
-  adminLoginError.style.display = "none";
-  adminUser.value = "";
-  adminPass.value = "";
-  adminLoginModal.style.display = "flex";
-  adminUser.focus();
-}
-
-function showAdminPanel() {
-  const style = localStorage.getItem("chatStyle") || "normal";
-  const tag = localStorage.getItem("adminTag") || "none";
-  
-  chatStyleSelect.value = style;
-  adminTagSelect.value = tag;
-
-  adminPanelModal.style.display = "flex";
-}
-
-if (!username) showNameModal();
-updateAdminButton(); 
-
-saveNameBtn.onclick = () => {
-  const newName = nameInput.value.trim();
-  if (!newName) return;
-  
-  const oldName = username;
-
-  // Bot notification for name change
-  if (oldName && newName !== oldName) {
-      sendBotNotification(`User ${oldName} changed name to ${newName}.`);
-  }
-
-  username = newName;
-  localStorage.setItem("username", newName);
-  nameModal.style.display = "none";
-};
-
-settingsBtn.onclick = showNameModal;
-
-// Admin login logic
-loginAdminBtn.onclick = () => {
-  const user = adminUser.value.trim();
-  const pass = adminPass.value.trim();
-  
-  if (ADMIN_CREDENTIALS[user] === pass) {
-    isAdmin = true;
-    localStorage.setItem("isAdmin", "true");
-    adminLoginModal.style.display = "none";
-    updateAdminButton();
-    showAdminPanel();
-    update(ref(db, `users/${uid}`), { isAdmin: true, username: username });
-  } else {
-    adminLoginError.style.display = "block";
-  }
-};
-
-// Admin panel save logic
-saveAdminSettingsBtn.onclick = () => {
-  const style = chatStyleSelect.value;
-  const tag = adminTagSelect.value;
-
-  localStorage.setItem("chatStyle", style);
-  localStorage.setItem("adminTag", tag);
-  
-  update(ref(db, `users/${uid}`), { chatStyle: style, adminTag: tag, username: username });
-
-  adminPanelModal.style.display = "none";
-};
-
-// Admin Action: Remove All Messages
-removeAllBtn.onclick = () => {
-  if (confirm("ARE YOU SURE YOU WANT TO REMOVE ALL MESSAGES? This cannot be undone.")) {
-    remove(messagesRef)
-      .then(() => {
-        alert("All messages removed successfully!");
-        adminPanelModal.style.display = "none";
-      })
-      .catch(error => {
-        alert("Error removing messages: " + error.message);
-      });
-  }
-};
-
-const msgInput = document.getElementById("msgInput");
-const sendBtn = document.getElementById("sendBtn");
-const messagesBox = document.getElementById("messages");
 
 // Reply feature functions
 function setReply(msgKey, username, text, targetUid) {
+    if (!user) return; // Must be authenticated to reply
     replyingTo = { key: msgKey, username, text, targetUid }; 
     replyInfo.innerHTML = `<strong>${username}</strong> ${text}`;
     replyPreview.style.display = "flex";
@@ -526,96 +590,18 @@ function cancelReply() {
 
 replyCancelBtn.onclick = cancelReply;
 
-
-function parseMuteTime(timeStr) {
-    const timeValue = parseInt(timeStr.slice(0, -1));
-    const timeUnit = timeStr.slice(-1).toLowerCase();
-    
-    if (isNaN(timeValue)) return 0;
-
-    let milliseconds = 0;
-    if (timeUnit === 'm') {
-        milliseconds = timeValue * 60 * 1000;
-    } else if (timeUnit === 'h') {
-        milliseconds = timeValue * 60 * 60 * 1000;
-    } else if (timeUnit === 'd') {
-        milliseconds = timeValue * 24 * 60 * 60 * 1000;
-    }
-    return milliseconds;
-}
-
-
-function processAdminCommand(text) {
-    const parts = text.toLowerCase().split(' ');
-    const command = parts[0];
-    const targetUid = replyingTo?.targetUid;
-    const targetUsername = replyingTo?.username;
-    
-    if (!targetUid) {
-        alert("Admin command must be a reply to a message.");
-        return true; 
-    }
-
-    if (command === '/mute') {
-        const timeStr = parts[1];
-        if (!timeStr) {
-            alert("Usage: /mute <time> (e.g., /mute 30m, /mute 1h, /mute 7d)");
-            return true;
-        }
-
-        const muteDuration = parseMuteTime(timeStr);
-        if (muteDuration > 0) {
-            const end = Date.now() + muteDuration;
-            set(ref(db, `mutedUsers/${targetUid}`), {
-                mutedUntil: end,
-                adminUid: uid,
-                adminUsername: username,
-                targetUsername: targetUsername 
-            });
-            // Bot notification
-            sendBotNotification(`${username} has muted ${targetUsername}.`);
-        } else {
-            alert("Invalid mute time format.");
-        }
-        return true;
-    } else if (command === '/unmute') { 
-        // Unmute command
-        remove(ref(db, `mutedUsers/${targetUid}`));
-        // Bot notification
-        sendBotNotification(`${username} has unmuted ${targetUsername}.`);
-        return true;
-    }
-    
-    return false; // Not an admin command
-}
-
 function sendMessage() {
-  if (!username) return showNameModal();
-  if (isMuted) return; 
+  if (!user) return; 
 
   const text = msgInput.value.trim();
   if (!text) return;
-  
-  // Check for and execute admin commands
-  if (isAdmin && replyingTo) {
-      if (processAdminCommand(text)) {
-          msgInput.value = "";
-          cancelReply();
-          return;
-      }
-  }
-
-  // Regular message logic
-  const chatStyle = localStorage.getItem("chatStyle") || "normal";
-  const adminTag = localStorage.getItem("adminTag") || "none";
 
   const messageData = { 
     text, 
-    uid, 
-    username, 
+    uid: user.uid, 
+    username: user.displayName, 
+    avatar: user.photoURL, // Photo URL or generated emoji
     created: Date.now(),
-    chatStyle: isAdmin ? chatStyle : "normal", 
-    adminTag: isAdmin ? adminTag : "none"
   };
 
   if (replyingTo) {
@@ -633,158 +619,7 @@ sendBtn.onclick = sendMessage;
 msgInput.addEventListener("keydown", e => { if (e.key === "Enter") sendMessage(); });
 
 
-// Mute Status Observer & Updater
-onValue(mutedUsersRef, snapshot => {
-    const mutedData = snapshot.val();
-    const myMute = mutedData ? mutedData[uid] : null;
-    const now = Date.now();
-
-    if (myMute && myMute.mutedUntil > now) {
-        isMuted = true;
-        muteEndTime = myMute.mutedUntil;
-        inputBar.classList.add('muted');
-        
-        if (muteInterval) clearInterval(muteInterval);
-        
-        muteInterval = setInterval(() => {
-            const remaining = muteEndTime - Date.now();
-            if (remaining <= 0) {
-                isMuted = false;
-                inputBar.classList.remove('muted');
-                mutedNav.textContent = '';
-                clearInterval(muteInterval);
-                remove(ref(db, `mutedUsers/${uid}`)); 
-            } else {
-                const seconds = Math.floor(remaining / 1000);
-                const minutes = Math.floor(seconds / 60);
-                const hours = Math.floor(minutes / 60);
-                const displayTime = `${hours % 24}h ${minutes % 60}m ${seconds % 60}s`;
-                mutedNav.innerHTML = `You are muted. Time remaining: ${displayTime}`;
-            }
-        }, 1000);
-
-    } else {
-        isMuted = false;
-        muteEndTime = 0;
-        inputBar.classList.remove('muted');
-        mutedNav.textContent = '';
-        if (muteInterval) clearInterval(muteInterval);
-        
-        if (myMute && myMute.mutedUntil <= now) {
-             remove(ref(db, `mutedUsers/${uid}`));
-        }
-    }
-});
-
-
-onValue(messagesRef, snapshot => {
-  const data = snapshot.val();
-  messagesBox.innerHTML = "";
-  messageCount = 0; // Reset count per render
-
-  if (data) {
-    const allMessages = Object.keys(data) 
-      .map(key => ({ key, ...data[key] }))
-      .sort((a,b) => a.created - b.created);
-
-    // Variabile per mantenere lo stato di iniezione dell'ad attraverso il rendering
-    let injectedAds = 0; 
-
-    allMessages.forEach(d => {
-        // Conta solo i messaggi utente e le notifiche bot non-ad
-        if (d.uid !== BOT_UID || d.text) {
-            messageCount++;
-        }
-
-        const wrap = document.createElement("div");
-        wrap.className = "bubble " + (d.uid === uid ? "me" : "them");
-        wrap.dataset.msgKey = d.key; 
-
-        // New: Reply click handler (simulates swipe) - only attach if not a bot message or ad
-        if (d.uid !== BOT_UID && !d.html) {
-            wrap.addEventListener('click', () => {
-                setReply(d.key, d.username, d.text, d.uid); 
-            });
-        }
-
-        // Add reply container if message is a reply
-        if (d.replyToKey) {
-            const replyDiv = document.createElement("div");
-            replyDiv.className = "reply-container";
-            replyDiv.innerHTML = `<strong>${d.replyToUser}</strong> ${d.replyToText}`;
-            wrap.appendChild(replyDiv);
-        }
-
-        const nameDiv = document.createElement("div");
-        nameDiv.className = "name";
-        nameDiv.textContent = d.username || "Unknown";
-        
-        // Add Tag
-        if (d.adminTag && d.adminTag !== "none") {
-          const tagSpan = document.createElement("span");
-          // Use 'tag-system' for the bot, 'tag-admin' or 'tag-mod' for others
-          tagSpan.className = `admin-tag tag-${d.adminTag === BOT_TAG ? 'system' : d.adminTag}`;
-          tagSpan.textContent = d.adminTag.toUpperCase();
-          nameDiv.appendChild(tagSpan);
-        }
-
-        wrap.appendChild(nameDiv);
-
-        const contentNode = document.createElement("div");
-        
-        // Check if message contains HTML (e.g., the Ad)
-        if (d.html) {
-            // Se è un annuncio salvato nel DB, lo visualizza
-            contentNode.innerHTML = d.html; 
-        } else {
-            contentNode.textContent = d.text || ""; // Insert plain text
-        }
-        
-        // Apply Gold Text Style
-        if (d.chatStyle === 'gold') {
-          contentNode.classList.add('gold-text');
-        }
-
-        wrap.appendChild(contentNode);
-        messagesBox.appendChild(wrap);
-
-        // --- Ad Insertion Logic (per l'iniezione dinamica) ---
-        // Se il conteggio raggiunge l'intervallo, inserisce l'annuncio
-        if (messageCount % AD_INTERVAL === 0 && d.uid !== BOT_UID && !d.html && messageCount > (injectedAds * AD_INTERVAL)) {
-             
-             injectedAds++; // Traccia l'iniezione
-
-             // Crea un bubble per l'annuncio
-             const adWrap = document.createElement("div");
-             adWrap.className = "bubble them"; 
-
-             const adNameDiv = document.createElement("div");
-             adNameDiv.className = "name";
-             adNameDiv.textContent = BOT_NAME;
-             
-             const adTagSpan = document.createElement("span");
-             adTagSpan.className = `admin-tag tag-system`;
-             adTagSpan.textContent = BOT_TAG.toUpperCase();
-             adNameDiv.appendChild(adTagSpan);
-
-             const adContentNode = document.createElement("div");
-             adContentNode.innerHTML = AD_HTML;
-             
-             adWrap.appendChild(adNameDiv);
-             adWrap.appendChild(adContentNode);
-             messagesBox.appendChild(adWrap);
-             
-             messageCount++; // Incrementa il conteggio per l'annuncio inserito dinamicamente
-             
-             // Re-calcola il prossimo intervallo casuale 10-12
-             AD_INTERVAL = Math.floor(Math.random() * (12 - 10 + 1)) + 10;
-        }
-    });
-  }
-  messagesBox.scrollTop = messagesBox.scrollHeight;
-});
-
-// theme toggle
+// --- THEME TOGGLE (unrelated to auth, kept as requested) ---
 const toggle = document.getElementById("themeToggle");
 toggle.onclick = () => {
   const dark = document.body.dataset.theme === "dark";
@@ -796,3 +631,4 @@ if (localStorage.getItem("theme") === "dark") document.body.dataset.theme = "dar
 
 </body>
 </html>
+
